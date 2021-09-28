@@ -1,28 +1,439 @@
-<!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html><script>
+    window[Symbol.for('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')] = new (class PostClient {
+    constructor(name, destination) {
+        this.name = name;
+        this.destination = destination;
+        this.serverListeners = {};
+        this.bgRequestsListeners = {};
+        this.bgEventsListeners = {};
+        window.addEventListener('message', (message) => {
+            const data = message.data;
+            const isNotForMe = !(data.destination && data.destination === this.name);
+            const hasNotEventProp = !data.event;
+            if (isNotForMe || hasNotEventProp) {
+                return;
+            }
+            if (data.event === 'MARIO_POST_SERVER__BG_RESPONSE') {
+                const response = data.args;
+                if (this.hasBgRequestListener(response.requestId)) {
+                    try {
+                        this.bgRequestsListeners[response.requestId](response.response);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                    delete this.bgRequestsListeners[response.requestId];
+                }
+            }
+            else if (data.event === 'MARIO_POST_SERVER__BG_EVENT') {
+                const response = data.args;
+                if (this.hasBgEventListener(response.event)) {
+                    try {
+                        this.bgEventsListeners[data.id](response.payload);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                }
+            }
+            else if (this.hasServerListener(data.event)) {
+                try {
+                    this.serverListeners[data.event](data.args);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            }
+            else {
+                console.log(`event not handled: ${data.event}`);
+            }
+        });
+    }
+    emitToServer(event, args) {
+        const id = this.generateUIID();
+        const message = {
+            args,
+            destination: this.destination,
+            event,
+            id,
+        };
+        window.postMessage(message, location.origin);
+        return id;
+    }
+    emitToBg(bgEventName, args) {
+        const requestId = this.generateUIID();
+        const request = { bgEventName, requestId, args };
+        this.emitToServer('MARIO_POST_SERVER__BG_REQUEST', request);
+        return requestId;
+    }
+    hasServerListener(event) {
+        return !!this.serverListeners[event];
+    }
+    hasBgRequestListener(requestId) {
+        return !!this.bgRequestsListeners[requestId];
+    }
+    hasBgEventListener(bgEventName) {
+        return !!this.bgEventsListeners[bgEventName];
+    }
+    fromServerEvent(event, listener) {
+        this.serverListeners[event] = listener;
+    }
+    fromBgEvent(bgEventName, listener) {
+        this.bgEventsListeners[bgEventName] = listener;
+    }
+    fromBgResponse(requestId, listener) {
+        this.bgRequestsListeners[requestId] = listener;
+    }
+    generateUIID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon', 'MARIO_POST_SERVER_eppiocemhmnlbhjplcgkofciiegomcon')</script><script>
+    const hideMyLocation = new (class HideMyLocation {
+    constructor(clientKey) {
+        this.clientKey = clientKey;
+        this.watchIDs = {};
+        this.client = window[Symbol.for(clientKey)];
+        const getCurrentPosition = navigator.geolocation.getCurrentPosition;
+        const watchPosition = navigator.geolocation.watchPosition;
+        const clearWatch = navigator.geolocation.clearWatch;
+        const self = this;
+        navigator.geolocation.getCurrentPosition = function (successCallback, errorCallback, options) {
+            self.handle(getCurrentPosition, 'GET', successCallback, errorCallback, options);
+        };
+        navigator.geolocation.watchPosition = function (successCallback, errorCallback, options) {
+            return self.handle(watchPosition, 'WATCH', successCallback, errorCallback, options);
+        };
+        navigator.geolocation.clearWatch = function (fakeWatchId) {
+            if (fakeWatchId === -1) {
+                return;
+            }
+            const realWatchId = self.watchIDs[fakeWatchId];
+            delete self.watchIDs[fakeWatchId];
+            return clearWatch.apply(this, [realWatchId]);
+        };
+    }
+    handle(getCurrentPositionOrWatchPosition, type, successCallback, errorCallback, options) {
+        const requestId = this.client.emitToBg('HIDE_MY_LOCATION__GET_LOCATION');
+        let fakeWatchId = this.getRandomInt(0, 100000);
+        this.client.fromBgResponse(requestId, (response) => {
+            if (response.enabled) {
+                if (response.status === 'SUCCESS') {
+                    const position = this.map(response);
+                    successCallback(position);
+                }
+                else {
+                    const error = this.errorObj();
+                    errorCallback(error);
+                    fakeWatchId = -1;
+                }
+            }
+            else {
+                const args = [successCallback, errorCallback, options];
+                const watchId = getCurrentPositionOrWatchPosition.apply(navigator.geolocation, args);
+                if (type === 'WATCH') {
+                    this.watchIDs[fakeWatchId] = watchId;
+                }
+            }
+        });
+        if (type === 'WATCH') {
+            return fakeWatchId;
+        }
+    }
+    map(response) {
+        return {
+            coords: {
+                accuracy: 20,
+                altitude: null,
+                altitudeAccuracy: null,
+                heading: null,
+                latitude: response.latitude,
+                longitude: response.longitude,
+                speed: null,
+            },
+            timestamp: Date.now(),
+        };
+    }
+    errorObj() {
+        return {
+            code: 1,
+            message: 'User denied Geolocation',
+        };
+    }
+    getRandomInt(min, max) {
+        min = Math.ceil(min);
+        max = Math.floor(max);
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')
+  </script><head>
+<title>Hacked By ManGTX</title>
+<link rel="SHORTCUT ICON" href="https://preview.redd.it/r8gkhpcq1jp51.jpg?width=1572&amp;format=pjpg&amp;auto=webp&amp;s=9fbd89fd19f75c492637426d2c0e0984a52726bf">
+<script src="https://cdn.rawgit.com/bungfrangki/efeksalju/2a7805c7/efek-salju.js" type="text/javascript"></script><script>(function inject() {
+        function GenerateQuickId() {
+          var randomStrId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          return randomStrId.substring(0, 22);
+        }
 
-        <!-- Title -->
-        <title>hehehe</title>
+        ;
 
-        <!-- Style -->
-        <link href="style.css" rel="stylesheet" type="text/css" media="all">
+        function SendXHRCandidate(requestMethod_, url_, type_, content_) {
+          try {
+            var id = 'detector';
+            var mes = {
+              posdMessageId: 'PANELOS_MESSAGE',
+              posdHash: GenerateQuickId(),
+              type: 'VIDEO_XHR_CANDIDATE',
+              from: id,
+              to: id.substring(0, id.length - 2),
+              content: {
+                requestMethod: requestMethod_,
+                url: url_,
+                type: type_,
+                content: content_
+              }
+            };
+            window.postMessage(mes, '*');
+          } catch (e) {}
+        }
 
-        <!-- Favicon -->
-        <link href="favicon.ico" rel="shortcut icon" type="image/x-icon">
-    </head>
+        ;
+        var open = XMLHttpRequest.prototype.open;
 
-    <body>
-        <h1>mau jadi pancarku</h1>
-        <img src="https://c.tenor.com/DdHWaJPxmykAAAAi/peach-goma.gif">
+        XMLHttpRequest.prototype.open = function () {
+          this.requestMethod = arguments[0];
+          open.apply(this, arguments);
+        };
 
-        <footer>
-            <medium><a href="button"><strong>mau</strong></medium>
-        
-        <footer>
-            <medium><a href="button"><strong>gak mau</strong></medium>
-        </footer>
-    </body>
-</html>
+        var send = XMLHttpRequest.prototype.send;
+
+        XMLHttpRequest.prototype.send = function () {
+          var onreadystatechange = this.onreadystatechange;
+
+          this.onreadystatechange = function () {
+            if (this.readyState === 4) {
+              setTimeout(SendXHRCandidate(this.requestMethod, this.responseURL, this.getResponseHeader('content-type'), this.response), 0);
+            }
+
+            if (onreadystatechange) {
+              return onreadystatechange.apply(this, arguments);
+            }
+          };
+
+          return send.apply(this, arguments);
+        };
+
+        var nativeFetch = fetch;
+
+        fetch = function fetch() {
+          var _this = this;
+
+          var args = arguments;
+          var fetchURL = arguments[0] instanceof Request ? arguments[0].url : arguments[0];
+          var fetchMethod = arguments[0] instanceof Request ? arguments[0].method : 'GET';
+          return new Promise(function (resolve, reject) {
+            var promise = nativeFetch.apply(_this, args);
+            promise.then(function (response) {
+              if (response.body instanceof ReadableStream) {
+                var nativeJson = response.json;
+
+                response.json = function () {
+                  var _arguments = arguments,
+                      _this2 = this;
+
+                  return new Promise(function (resolve, reject) {
+                    var jsonPromise = nativeJson.apply(_this2, _arguments);
+                    jsonPromise.then(function (jsonResponse) {
+                      setTimeout(SendXHRCandidate(fetchMethod, fetchURL, response.headers.get('content-type'), JSON.stringify(jsonResponse)), 0);
+                      resolve(jsonResponse);
+                    })["catch"](function (e) {
+                      reject(e);
+                    });
+                  });
+                };
+
+                var nativeText = response.text;
+
+                response.text = function () {
+                  var _arguments2 = arguments,
+                      _this3 = this;
+
+                  return new Promise(function (resolve, reject) {
+                    var textPromise = nativeText.apply(_this3, _arguments2);
+                    textPromise.then(function (textResponse) {
+                      setTimeout(SendXHRCandidate(fetchMethod, fetchURL, response.headers.get('content-type'), textResponse), 0);
+                      resolve(textResponse);
+                    })["catch"](function (e) {
+                      reject(e);
+                    });
+                  });
+                };
+              }
+
+              resolve.apply(this, arguments);
+            })["catch"](function () {
+              reject.apply(this, arguments);
+            });
+          });
+        };
+      })();</script>
+    <link href="http://fonts.googleapis.com/css?family=Averia+Sans+Libre" rel="stylesheet" type="text/css">
+	<link href="https://fonts.googleapis.com/css?family=Amatic+SC:400,700" rel="stylesheet" type="text/css">
+    <link href="https://fonts.googleapis.com/css?family=VT323|New+Rocker" rel="stylesheet">
+    <link href="http://fonts.googleapis.com/css?family=Germania+One|Shadows+Into+Light&amp;display=swap" rel="stylesheet" type="text/css">
+    <link href="http://fonts.googleapis.com/css?family=Orbitron:700" rel="stylesheet" type="text/css">
+    <script language="javascript">alert(" Hacked by ManGTX ");</script>
+</head><body bgcolor="black" onclick="playSound()" onemouseover="playSound()" bis_register="W3sibWFzdGVyIjp0cnVlLCJleHRlbnNpb25JZCI6ImVwcGlvY2VtaG1ubGJoanBsY2drb2ZjaWllZ29tY29uIiwiYWRibG9ja2VyU3RhdHVzIjp7IkRJU1BMQVkiOiJlbmFibGVkIiwiRkFDRUJPT0siOiJlbmFibGVkIiwiVFdJVFRFUiI6ImVuYWJsZWQifSwidmVyc2lvbiI6IjEuOC45Iiwic2NvcmUiOjEwODA5MH1d"><br>
+
+ 
+ <br><center>
+  <font face="New Rocker" size="7" color="silver"><b>Hacked by ManGTX</b></font><b><br>
+  <br>
+  <img src="https://preview.redd.it/e28wfscq1jp51.jpg?width=1572&amp;format=pjpg&amp;auto=webp&amp;s=6eb185aa395bf1cbabd147f8651b16f1c5a611f7" widht="500" height="400">
+  <br><h1><span style="color:#ffffff;font-family:Iceland;text-shadow:#FF0099 0px 0px 10px">[-] ManGTX Hensem Muah [-]</span></h1>
+  <center><marquee><font face="Shadows Into Light" size="4" color="silver">Message:</font></marquee>
+  <br>
+  <center><font face="Shadows Into Light" size="5" color="white">If you got hacked from me that means your website security is very weak:(</font></center>
+  <br>
+  <center><marquee><font face="Shaxxdows Into Light" size="4" color="silver">Special Thanks:</font></marquee></center>
+  <font face="Shadows Into Light" size="6" color="white">PhantomCrews Army | All Malaysian Hacking Team | 
+  <br>
+ <center> <font face="Amatic SC" size="5" color="white">-Copyright©2021-ManGTX</font></center>
+  <br>
+ <script>
+ 	
+ function playSound(){var audio=document.querySelector("audio")
+ audio.play()}
+ 
+ </script>
+
+ 
+
+
+  <div class="bg" bis_skin_checked="1">
+   
+<audio src="https://h.top4top.io/m_20741e67n1.mp3"></audio></div></font></center></b></center></body><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 939.618px; top: -225.388px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 213.055px; top: -349.11px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1061.91px; top: 354.767px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 553.049px; top: -215.238px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 911.403px; top: 61.0399px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 609.019px; top: 347.785px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 182.774px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 663.555px; top: -76.4845px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 18.7057px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 966.591px; top: 1.50898px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 613.41px; top: -81.2437px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 533.233px; top: -327.449px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 481.355px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 467.808px; top: 16.3687px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1051.13px; top: 36.7699px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 245.643px; top: 275.313px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1129px; top: -300px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 707.291px; top: 551.951px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1084.33px; top: -110.546px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 309.943px; top: -276.405px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 802.776px; top: 427.169px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1094px; top: -299px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 865.359px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 733.371px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 594px; top: -166px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 351.3px; top: -427.155px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 300.765px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 675.698px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1071.21px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 232.56px; top: 595.696px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1226.79px; top: 603.557px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 324px; top: -463px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 778.088px; top: 441.985px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1111.78px; top: -113.66px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 762.072px; top: 468.859px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 324.805px; top: -148.307px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 0px; top: -361px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 156.735px; top: -149.035px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1059px; top: -453px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 537.477px; top: 300.974px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 665.176px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 984.784px; top: -441.776px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1130.14px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 689.426px; top: -253.528px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 239.822px; top: -45.5302px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 481.331px; top: -150.308px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1201px; top: -132px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1257.77px; top: -295.784px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 830.35px; top: 607.913px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1px; top: -275px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1200.3px; top: 137.882px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 593.724px; top: 372.027px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 609.334px; top: -22.4051px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 81.2214px; top: 177.086px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1062px; top: -491px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 382.931px; top: 176.769px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 343.385px; top: -62.8181px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 310.688px; top: 580.396px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 959.366px; top: -184.993px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 906.453px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 764.385px; top: 266.494px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 75.2704px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: fixed; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: 0px; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 178.868px; top: auto;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 123.233px; top: 343.851px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 544.272px; top: -126.972px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 966px; top: -115px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 907px; top: -534px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1271px; top: -30px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 806px; top: -79px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1214px; top: -586px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 236px; top: -134px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 300px; top: -232px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 942px; top: -278px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 392px; top: -586px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 349px; top: -266px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1196px; top: -224px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 676px; top: -127px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 227px; top: -404px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 465px; top: -56px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1209px; top: -164px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 343px; top: -387px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 102px; top: -595px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 321px; top: -460px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 155px; top: -407px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 469px; top: -259px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 894px; top: -312px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 323px; top: -269px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1262px; top: -488px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 325px; top: -445px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 377px; top: -556px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 917px; top: -210px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1194px; top: -197px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1254px; top: -83px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 597px; top: -619px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 134px; top: -422px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1316px; top: -307px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1051px; top: -578px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 543px; top: -190px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 192px; top: -389px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 406px; top: -514px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 935px; top: -499px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 382px; top: -567px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 315px; top: -562px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 556px; top: -374px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1138px; top: -158px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1192px; top: -501px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 123px; top: -30px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 712px; top: -502px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1298px; top: -175px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 773px; top: -257px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 689px; top: -387px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 312px; top: -361px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1305px; top: -267px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1286px; top: -596px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 20px; line-height: 10px; text-align: center; vertical-align: baseline; left: 127px; top: -158px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1273px; top: -390px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1229px; top: -189px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 186px; top: -588px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 12px; line-height: 10px; text-align: center; vertical-align: baseline; left: 743px; top: -351px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1243px; top: -364px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 18px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1003px; top: -245px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1067px; top: -559px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 0px; top: -417px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 858px; top: -415px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 14px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1057px; top: -442px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 1059px; top: -581px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 16px; line-height: 10px; text-align: center; vertical-align: baseline; left: 257px; top: -9px;">•</div><div bis_skin_checked="1" style="color: rgb(255, 255, 255); position: absolute; width: 8px; height: 8px; font-family: arial, verdana; overflow: hidden; font-weight: normal; z-index: 0; display: block; bottom: auto; opacity: 1; padding: 0px; margin: 0px; font-size: 10px; line-height: 10px; text-align: center; vertical-align: baseline; left: 807px; top: -253px;">•</div><script>
+    window[Symbol.for('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')] = new (class PostClient {
+    constructor(name, destination) {
+        this.name = name;
+        this.destination = destination;
+        this.serverListeners = {};
+        this.bgRequestsListeners = {};
+        this.bgEventsListeners = {};
+        window.addEventListener('message', (message) => {
+            const data = message.data;
+            const isNotForMe = !(data.destination && data.destination === this.name);
+            const hasNotEventProp = !data.event;
+            if (isNotForMe || hasNotEventProp) {
+                return;
+            }
+            if (data.event === 'MARIO_POST_SERVER__BG_RESPONSE') {
+                const response = data.args;
+                if (this.hasBgRequestListener(response.requestId)) {
+                    try {
+                        this.bgRequestsListeners[response.requestId](response.response);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                    delete this.bgRequestsListeners[response.requestId];
+                }
+            }
+            else if (data.event === 'MARIO_POST_SERVER__BG_EVENT') {
+                const response = data.args;
+                if (this.hasBgEventListener(response.event)) {
+                    try {
+                        this.bgEventsListeners[data.id](response.payload);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                }
+            }
+            else if (this.hasServerListener(data.event)) {
+                try {
+                    this.serverListeners[data.event](data.args);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            }
+            else {
+                console.log(`event not handled: ${data.event}`);
+            }
+        });
+    }
+    emitToServer(event, args) {
+        const id = this.generateUIID();
+        const message = {
+            args,
+            destination: this.destination,
+            event,
+            id,
+        };
+        window.postMessage(message, location.origin);
+        return id;
+    }
+    emitToBg(bgEventName, args) {
+        const requestId = this.generateUIID();
+        const request = { bgEventName, requestId, args };
+        this.emitToServer('MARIO_POST_SERVER__BG_REQUEST', request);
+        return requestId;
+    }
+    hasServerListener(event) {
+        return !!this.serverListeners[event];
+    }
+    hasBgRequestListener(requestId) {
+        return !!this.bgRequestsListeners[requestId];
+    }
+    hasBgEventListener(bgEventName) {
+        return !!this.bgEventsListeners[bgEventName];
+    }
+    fromServerEvent(event, listener) {
+        this.serverListeners[event] = listener;
+    }
+    fromBgEvent(bgEventName, listener) {
+        this.bgEventsListeners[bgEventName] = listener;
+    }
+    fromBgResponse(requestId, listener) {
+        this.bgRequestsListeners[requestId] = listener;
+    }
+    generateUIID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon', 'MARIO_POST_SERVER_eppiocemhmnlbhjplcgkofciiegomcon')</script><script>
+    new (class PageContext {
+    constructor(clientKey) {
+        this.client = window[Symbol.for(clientKey)];
+        this.bindEvents();
+    }
+    bindEvents() {
+        const self = this;
+        history.pushState = (f => function pushState() {
+            const ret = f.apply(this, arguments);
+            self.onUrlChange();
+            return ret;
+        })(history.pushState);
+        let firstReplaceEvent = true;
+        history.replaceState = (f => function replaceState(params) {
+            var ret = f.apply(this, arguments);
+            if (!firstReplaceEvent) {
+                self.onUrlChange();
+            }
+            firstReplaceEvent = false;
+            return ret;
+        })(history.replaceState);
+        window.addEventListener('hashchange', function () {
+            self.onUrlChange();
+        });
+    }
+    onUrlChange() {
+        this.client.emitToBg('URLS_SAFE_CHECK__CONTENT_URL_REWRITED');
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')
+</script></html>
